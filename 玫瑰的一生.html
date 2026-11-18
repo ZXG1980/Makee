@@ -1,0 +1,793 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>玫瑰的一生 · 3D 参数化</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ccircle cx='16' cy='14' r='9' fill='%23c2334a'/%3E%3Ccircle cx='16' cy='14' r='4.5' fill='%23e8607a'/%3E%3Cpath d='M16 23 L16 31' stroke='%234e6b53' stroke-width='2'/%3E%3C/svg%3E">
+<link rel="stylesheet" href="https://miaoda.feishu.cn/fonts/css2?family=Noto+Serif+SC:wght@400;600&family=Noto+Sans+SC:wght@300;400;500&display=swap">
+<style>
+:root{
+  --ink:#E9F0EA; --ink-dim:#8FA296; --ink-faint:#66786C;
+  --line:rgba(196,214,201,.16); --line-soft:rgba(196,214,201,.08);
+  --accent:#C7D8CB;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%;overflow:hidden}
+body{
+  background:
+    radial-gradient(70% 60% at 46% 34%, #1C2B24 0%, #16221C 30%, #0E1713 62%, #050807 100%);
+  color:var(--ink);
+  font-family:"Noto Sans SC","PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif;
+  -webkit-font-smoothing:antialiased;
+}
+#scene{position:fixed;inset:0;width:100%;height:100%;display:block;touch-action:none}
+
+/* 标题 */
+.head{
+  position:fixed;left:36px;top:30px;pointer-events:none;z-index:2;
+}
+.kicker{font-size:10px;letter-spacing:.22em;color:var(--ink-faint)}
+h1{
+  font-family:"Noto Serif SC","Songti SC",serif;font-weight:600;
+  font-size:clamp(26px,3.4vw,40px);letter-spacing:.09em;line-height:1.2;margin-top:10px;
+}
+.latin{
+  font-family:"Noto Serif SC","Songti SC",serif;font-style:italic;
+  font-size:12px;color:var(--ink-dim);margin-top:7px;letter-spacing:.03em;
+}
+
+/* 阶段铭牌 */
+.badge{
+  position:fixed;right:36px;top:34px;text-align:right;z-index:2;pointer-events:none;
+}
+.badge .stageNo{
+  font-family:"Noto Serif SC","Songti SC",serif;
+  font-size:13px;letter-spacing:.14em;color:var(--ink);
+}
+.badge .stageEn{
+  font-size:10px;letter-spacing:.16em;color:var(--ink-faint);margin-top:5px;
+}
+.badge .age{
+  font-size:11px;color:var(--ink-dim);margin-top:12px;
+  font-variant-numeric:tabular-nums;
+}
+
+/* 底部控制区 */
+.dock{
+  position:fixed;left:0;right:0;bottom:0;z-index:3;
+  padding:16px 36px 20px;
+  background:linear-gradient(to top, rgba(6,10,8,.92) 0%, rgba(6,10,8,.66) 62%, rgba(6,10,8,0) 100%);
+  backdrop-filter:blur(3px);
+}
+.timeline{
+  position:relative;height:56px;margin-bottom:10px;
+}
+.tl-track{
+  position:absolute;left:0;right:0;top:34px;height:1px;background:var(--line);
+}
+.tl-fill{
+  position:absolute;left:0;top:34px;height:1px;background:var(--accent);opacity:.85;
+}
+.tl-node{
+  position:absolute;top:34px;width:1px;height:7px;margin-top:-3px;background:var(--line);
+}
+.tl-node b{
+  position:absolute;top:12px;left:50%;transform:translateX(-50%);
+  font-weight:400;font-size:10.5px;letter-spacing:.1em;color:var(--ink-faint);
+  white-space:nowrap;
+}
+.tl-node.on b{color:var(--ink)}
+.tl-head{
+  position:absolute;top:34px;width:9px;height:9px;margin:-4px 0 0 -4px;
+  background:var(--accent);box-shadow:0 0 12px rgba(199,216,203,.6);
+}
+.tl-hit{
+  position:absolute;left:0;right:0;top:20px;height:28px;cursor:pointer;
+}
+
+.tl-node-label{position:absolute;top:0;left:0;font-size:10px;letter-spacing:.18em;color:var(--ink-faint)}
+
+.bar{display:flex;align-items:flex-end;gap:22px;flex-wrap:wrap}
+.rowctl{display:flex;flex-direction:column;gap:7px;min-width:120px}
+.rowctl .lab{display:flex;justify-content:space-between;font-size:10.5px;letter-spacing:.1em;color:var(--ink-dim)}
+.rowctl .lab b{color:var(--ink);font-weight:400;font-variant-numeric:tabular-nums}
+
+input[type=range]{appearance:none;-webkit-appearance:none;width:100%;height:16px;background:transparent;cursor:pointer}
+input[type=range]::-webkit-slider-runnable-track{height:1px;background:var(--line)}
+input[type=range]::-webkit-slider-thumb{
+  -webkit-appearance:none;width:9px;height:9px;border-radius:0;background:var(--accent);margin-top:-4px;
+}
+input[type=range]::-moz-range-track{height:1px;background:var(--line)}
+input[type=range]::-moz-range-thumb{width:9px;height:9px;border-radius:0;border:0;background:var(--accent)}
+
+.btn{
+  appearance:none;background:transparent;border:1px solid var(--line);color:var(--ink);
+  font-family:inherit;font-size:11px;letter-spacing:.08em;padding:9px 14px;cursor:pointer;
+  transition:border-color .2s,background .2s;white-space:nowrap;
+}
+.btn:hover{border-color:var(--accent);background:rgba(199,216,203,.08)}
+.btn.primary{background:rgba(199,216,203,.14);border-color:rgba(199,216,203,.4)}
+
+.vars{display:flex;gap:1px;background:var(--line-soft)}
+.vars button{
+  appearance:none;border:0;background:#0B120F;color:var(--ink-dim);font-family:inherit;
+  font-size:10.5px;letter-spacing:.05em;padding:8px 10px;cursor:pointer;
+  display:flex;align-items:center;gap:6px;white-space:nowrap;
+}
+.vars button i{width:8px;height:8px;border-radius:50%;border:1px solid rgba(255,255,255,.22)}
+.vars button[aria-pressed="true"]{background:#1B2A22;color:var(--ink)}
+
+.hint{font-size:10px;color:var(--ink-faint);letter-spacing:.08em;margin-top:8px}
+
+.toast{
+  position:fixed;left:50%;bottom:210px;transform:translate(-50%,10px);
+  background:#16261F;border:1px solid var(--line);color:var(--ink);
+  font-size:11.5px;letter-spacing:.08em;padding:9px 16px;opacity:0;pointer-events:none;
+  transition:opacity .25s,transform .25s;z-index:9;
+}
+.toast.on{opacity:1;transform:translate(-50%,0)}
+
+@media (max-width:860px){
+  .head{left:18px;top:16px}
+  h1{font-size:25px}
+  .latin{font-size:11px;margin-top:4px}
+  .badge{right:18px;top:18px}
+  .badge .age{display:none}
+  .dock{padding:8px 16px 14px}
+  .timeline{height:44px}
+  .tl-node b{font-size:9px;letter-spacing:.04em}
+  .bar{gap:9px 10px}
+  #play{order:1;flex:1 1 26%}
+  #reseed{order:2;flex:1 1 26%}
+  #export{order:3;flex:1 1 34%}
+  .rowctl{order:4;flex:1 1 42%;min-width:0}
+  .rowctl.seed{display:none}
+  .vars{order:5;width:100%}
+  .vars button{flex:1;justify-content:center;padding:7px 4px;font-size:10px}
+  .hint{display:none}
+}
+</style>
+<script type="importmap">
+{"imports":{
+  "three":"https://fastly.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+  "three/addons/":"https://fastly.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+}}
+</script>
+</head>
+<body>
+<canvas id="scene"></canvas>
+
+<div class="head">
+  <div class="kicker">参数化植物 · 三维</div>
+  <h1>玫瑰的一生</h1>
+  <div class="latin" id="latin">Rosa gallica</div>
+</div>
+
+<div class="badge">
+  <div class="stageNo" id="stageNo">04 · 盛极</div>
+  <div class="stageEn" id="stageEn">full bloom</div>
+  <div class="age" id="age">第 26 天 / 共 40 天</div>
+</div>
+
+<div class="dock">
+  <div class="timeline" id="timeline">
+    <div class="tl-track"></div>
+    <div class="tl-fill" id="tlFill"></div>
+    <div class="tl-head" id="tlHead"></div>
+    <div class="tl-hit" id="tlHit"></div>
+  </div>
+
+  <div class="bar">
+    <button class="btn primary" id="play">暂停</button>
+
+    <div class="vars" id="vars"></div>
+
+    <div class="rowctl">
+      <div class="lab"><span>花瓣数</span><b id="petalsVal">30</b></div>
+      <input type="range" id="petals" min="20" max="48" step="1" value="30">
+    </div>
+
+    <div class="rowctl">
+      <div class="lab"><span>卷曲度</span><b id="curlVal">100%</b></div>
+      <input type="range" id="curl" min="0" max="100" value="100">
+    </div>
+
+    <div class="rowctl seed" style="min-width:110px">
+      <div class="lab"><span>随机种子</span><b>seed</b></div>
+      <input type="number" id="seed" value="7719" min="1" max="99999"
+        style="width:100%;background:transparent;border:0;border-bottom:1px solid var(--line);
+               color:var(--ink);font-family:inherit;font-size:11.5px;padding:4px 2px;
+               font-variant-numeric:tabular-nums">
+    </div>
+
+    <button class="btn" id="reseed">换一朵</button>
+    <button class="btn" id="export">导出 PNG</button>
+  </div>
+  <div class="hint">拖拽旋转视角 · 滚轮缩放 · 时间轴可拖动</div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+/* ============================================================
+   参数与配色
+   ============================================================ */
+const VAR = {
+  red:      { name:'红玫瑰',  latin:"Rosa gallica", dot:'#c2334a',
+              root:'#2B0409', mid:'#8C0E1F', tip:'#CE2A3C', dry:'#472B1C', dryTip:'#8B5735' },
+  white:    { name:'白玫瑰',  latin:"Rosa 'Alba Maxima'", dot:'#efeee6',
+              root:'#C4BEAC', mid:'#F0EADC', tip:'#FFFDF8', dry:'#8C7C63', dryTip:'#BCAA8E' },
+  pink:     { name:'粉玫瑰',  latin:"Rosa 'Blush Damask'", dot:'#e79aab',
+              root:'#7A3D4C', mid:'#E58CA2', tip:'#FFD5DE', dry:'#7E5A4C', dryTip:'#B08A75' },
+  champagne:{ name:'香槟玫瑰', latin:"Rosa 'Champagne'", dot:'#dcb887',
+              root:'#6E5535', mid:'#D8B884', tip:'#FBEBCB', dry:'#7A5F3E', dryTip:'#A88A5E' }
+};
+
+const state = {
+  variety:'red', life:0, petals:30, curl:1.0, seed:7719, playing:true
+};
+
+/* ============================================================
+   场景
+   ============================================================ */
+const canvas = document.getElementById('scene');
+const renderer = new THREE.WebGLRenderer({
+  canvas, antialias:true, alpha:true, preserveDrawingBuffer:true
+});
+renderer.setPixelRatio(Math.min(devicePixelRatio || 1, 2));
+renderer.setSize(innerWidth, innerHeight);
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 0.9;
+
+const scene = new THREE.Scene();
+const camera = new THREE.PerspectiveCamera(34, innerWidth/innerHeight, 0.1, 60);
+camera.position.set(0.55, 4.95, 4.85);
+
+const controls = new OrbitControls(camera, canvas);
+controls.target.set(0, 0.92, 0);
+controls.enableDamping = true;
+controls.dampingFactor = 0.07;
+controls.enablePan = false;
+controls.minDistance = 2.8;
+controls.maxDistance = 9;
+controls.minPolarAngle = 0.18;
+controls.maxPolarAngle = 1.36;
+controls.autoRotate = false;
+controls.update();
+
+/* 光照 */
+scene.add(new THREE.HemisphereLight(0xDDE8DE, 0x0C120E, 0.26));
+
+const key = new THREE.DirectionalLight(0xFFEFD9, 2.5);
+key.position.set(3.6, 5.4, 3.2);
+key.castShadow = true;
+key.shadow.mapSize.set(1024, 1024);
+key.shadow.camera.near = 0.6; key.shadow.camera.far = 13;
+key.shadow.camera.left = -2.6; key.shadow.camera.right = 2.6;
+key.shadow.camera.top = 2.6; key.shadow.camera.bottom = -2.6;
+key.shadow.bias = -0.0013;
+key.shadow.radius = 2.2;
+scene.add(key);
+
+const rim = new THREE.DirectionalLight(0xA7D4BC, 1.45);
+rim.position.set(-4.2, 1.6, -4.0);
+scene.add(rim);
+
+const core = new THREE.PointLight(0xFFC9A8, 0.2, 4);
+core.position.set(0, 0.6, 0.9);
+scene.add(core);
+
+/* ============================================================
+   花瓣曲面
+   ============================================================ */
+const NU = 16, NV = 11;
+const VCOUNT = (NU+1)*(NV+1);
+
+function makeSurface(colorHex, opts={}){
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(VCOUNT*3), 3));
+  geo.setAttribute('color', new THREE.BufferAttribute(new Float32Array(VCOUNT*3), 3));
+  const idx = [];
+  for (let i=0;i<NU;i++) for (let j=0;j<NV;j++){
+    const a = i*(NV+1)+j, b = a+1, c = a+(NV+1), d = c+1;
+    idx.push(a,b,c, b,d,c);
+  }
+  geo.setIndex(idx);
+  const mat = new THREE.MeshPhysicalMaterial({
+    vertexColors:true, color:new THREE.Color(colorHex),
+    roughness:0.62, metalness:0.0, side:THREE.DoubleSide,
+    clearcoat:0.08, clearcoatRoughness:0.7
+  });
+  const mesh = new THREE.Mesh(geo, mat);
+  mesh.frustumCulled = false;
+  mesh.castShadow = true;
+  mesh.receiveShadow = true;
+  return mesh;
+}
+
+const _c1 = new THREE.Color(), _c2 = new THREE.Color(), _c3 = new THREE.Color();
+const _c4 = new THREE.Color(), _c5 = new THREE.Color();
+
+/**
+ * P: {len,w,fold,cup,bend,wave,phase,root,mid,tip,dry,dryAmt,dryMix,edgeLight}
+ */
+function updateSurface(mesh, P){
+  const pos = mesh.geometry.attributes.position.array;
+  const col = mesh.geometry.attributes.color.array;
+  const rootC = _c1.set(P.root);
+  const midC  = _c2.set(P.mid);
+  const tipC  = _c3.set(P.tip);
+  const dryC = _c4.set(P.dry), dryTipC = _c5.set(P.dryTip);
+
+  // 颜色查找表（按 u）
+  const LUT = [];
+  for (let iu=0; iu<=NU; iu++){
+    const u = iu/NU;
+    const k1 = Math.min(1, u*2.1), k2 = Math.max(0,(u-0.46)*1.86);
+    const c = new THREE.Color().copy(rootC).lerp(midC, k1).lerp(tipC, k2);
+    // 衰败：沿瓣尖更早变色
+    const dw = P.dryAmt * (0.55 + 0.45*u);
+    const dc = new THREE.Color().copy(dryC).lerp(dryTipC, u);
+    c.lerp(dc, Math.min(0.94, dw));
+    LUT.push(c);
+  }
+
+  let i = 0;
+  for (let iu=0; iu<=NU; iu++){
+    const u = iu/NU;
+    const shape = 0.54 + 0.46*Math.pow(Math.sin(Math.PI*Math.pow(u,0.74)), 0.46);
+    const halfW = P.w * shape;
+    const arc = P.fold * Math.pow(u, 1.35);
+    const ay = P.len * u * Math.cos(arc);
+    const az = P.len * u * Math.sin(arc);
+    const baseCol = LUT[iu];
+
+    for (let iv=0; iv<=NV; iv++){
+      const v = iv/NV*2 - 1;
+      const roundTop = 1 - 0.11*Math.pow(u,7)*(1 - Math.sqrt(Math.max(0,1-v*v)));
+      const notchDip = 0.045*Math.exp(-(v/0.28)*(v/0.28))*Math.pow(u,9);
+      pos[i*3]   = halfW * v;
+      pos[i*3+1] = ay*roundTop - P.len*notchDip;
+      pos[i*3+2] = P.cup*v*v*halfW*0.85
+                 + az
+                 - P.bend*P.len*u*u*0.30
+                 + P.wave*Math.sin(v*Math.PI*1.7 + P.phase)*Math.pow(u,2.2)*P.w*0.085;
+
+      // 花瓣脉络 + 细微起伏，避免塑料感
+      const vein = 1 + 0.042*Math.sin(v*Math.PI*4.6 + u*1.2 + P.phase*0.25) * Math.pow(u,0.85);
+      const edge = (1 + P.edgeLight*(v*v)) * vein;
+      pos[i*3+2] += Math.sin(v*Math.PI*4.2 + P.phase) * 0.0035 * u;
+
+      col[i*3]   = Math.min(1, baseCol.r*edge);
+      col[i*3+1] = Math.min(1, baseCol.g*edge);
+      col[i*3+2] = Math.min(1, baseCol.b*edge);
+      i++;
+    }
+  }
+  mesh.geometry.attributes.position.needsUpdate = true;
+  mesh.geometry.attributes.color.needsUpdate = true;
+  mesh.geometry.computeVertexNormals();
+}
+
+/* ============================================================
+   花朵装配
+   ============================================================ */
+const flower = new THREE.Group();
+flower.position.y = 0.98;
+scene.add(flower);
+
+// 花心：紧卷的小球体，填住内层空隙
+const heart = new THREE.Mesh(
+  new THREE.SphereGeometry(0.13, 18, 14),
+  new THREE.MeshPhysicalMaterial({ color:0x7A0A1A, roughness:0.55, clearcoat:0.1 })
+);
+heart.position.set(0, 0.06, 0);
+heart.castShadow = true; heart.receiveShadow = true;
+flower.add(heart);
+
+const stemGroup = new THREE.Group();
+scene.add(stemGroup);
+
+let petals = [];
+let sepalMeshes = [];
+let stemMesh = null, leafA = null, leafB = null;
+let receptacle = null;
+let rnd = mulberry32(state.seed);
+
+function mulberry32(a){
+  return function(){
+    a |= 0; a = a + 0x6D2B79F5 | 0;
+    let t = Math.imul(a ^ a >>> 15, 1 | a);
+    t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t;
+    return ((t ^ t >>> 14) >>> 0) / 4294967296;
+  };
+}
+
+function buildPetals(n){
+  for (const p of petals) flower.remove(p.pivot);
+  petals = [];
+  rnd = mulberry32(state.seed);
+  for (let k=0;k<n;k++){
+    const tv = n > 1 ? k/(n-1) : 0;
+    const mesh = makeSurface('#ffffff');
+    const pivot = new THREE.Group();
+    pivot.add(mesh);
+    flower.add(pivot);
+    petals.push({
+      mesh, pivot,
+      t: tv,
+      ang: k*2.39996,
+      phase: rnd()*Math.PI*2,
+      jitter: (rnd()-0.5),
+      dropAt: 1.20 - tv*0.62 + rnd()*0.10,
+      spin: (rnd()-0.5)*2
+    });
+  }
+}
+
+function buildPlant(){
+  // 花托
+  if (receptacle) scene.remove(receptacle);
+  receptacle = new THREE.Mesh(
+    new THREE.SphereGeometry(0.155, 20, 14),
+    new THREE.MeshStandardMaterial({ color:0x37543D, roughness:0.82 })
+  );
+  receptacle.scale.set(1, 0.92, 1);
+  receptacle.position.set(0, 0.93, 0);
+  receptacle.castShadow = true; receptacle.receiveShadow = true;
+  scene.add(receptacle);
+
+  // 萼片
+  for (const s of sepalMeshes) scene.remove(s.pivot);
+  sepalMeshes = [];
+  for (let i=0;i<5;i++){
+    const mesh = makeSurface('#ffffff');
+    const pivot = new THREE.Group();
+    pivot.add(mesh);
+    scene.add(pivot);
+    sepalMeshes.push({ mesh, pivot, ang: (i - 2)*0.72 + 0.15 });
+  }
+
+  // 叶
+  for (const l of [leafA, leafB]) if (l) scene.remove(l);
+  leafA = makeSurface('#ffffff');
+  leafB = makeSurface('#ffffff');
+  scene.add(leafA, leafB);
+  leafA.position.set(0.34, -0.42, 0.18);
+  leafA.rotation.set(1.45, 0.4, 0.5);
+  leafB.position.set(-0.30, -1.02, 0.20);
+  leafB.rotation.set(1.35, -2.6, 0.4);
+
+  // 茎
+  if (stemMesh) scene.remove(stemMesh);
+  stemMesh = new THREE.Mesh(
+    new THREE.TubeGeometry(stemCurve(0), 40, 0.062, 10, false),
+    new THREE.MeshStandardMaterial({ color:0x3D5F44, roughness:0.78 })
+  );
+  stemMesh.castShadow = true; stemMesh.receiveShadow = true;
+  scene.add(stemMesh);
+
+  buildPetals(state.petals);
+}
+
+function stemCurve(wither){
+  const droop = wither * 0.5;
+  return new THREE.CatmullRomCurve3([
+    new THREE.Vector3(0, 0.9, 0),
+    new THREE.Vector3(0.03 + droop*0.1, 0.35, 0.03),
+    new THREE.Vector3(-0.10 + droop*0.3, -0.55, 0.10),
+    new THREE.Vector3(-0.34 + droop*0.8, -2.2 + droop*0.4, 0.18 + droop*0.5)
+  ]);
+}
+
+/* ============================================================
+   生命周期布局
+   ============================================================ */
+const STAGES = [
+  { at:0.00, no:'01', cn:'花苞', en:'bud' },
+  { at:0.20, no:'02', cn:'初绽', en:'opening' },
+  { at:0.40, no:'03', cn:'盛开', en:'blooming' },
+  { at:0.62, no:'04', cn:'盛极', en:'full bloom' },
+  { at:0.80, no:'05', cn:'衰败', en:'fading' },
+  { at:0.95, no:'06', cn:'凋落', en:'falling' }
+];
+
+function lerp(a,b,k){ return a + (b-a)*k; }
+function clamp01(x){ return Math.min(1, Math.max(0, x)); }
+
+let builtLife = -9;
+function layout(life, force){
+  const need = !!force || Math.abs(life - builtLife) > 0.004;
+  const open   = clamp01((life - 0.05) / 0.42);
+  const wither = clamp01((life - 0.68) / 0.32);
+  const V = VAR[state.variety];
+  const curl = state.curl;
+
+  // 花头的"头垂"——衰败时整朵花向下弯
+  flower.rotation.z = wither * 0.42;
+  flower.rotation.x = wither * 0.16;
+  flower.position.y = 0.98 - wither * 0.08;
+  heart.scale.setScalar((0.32 + 0.68*open) * (1 - 0.55*wither));
+  heart.position.y = 0.06 * open;
+
+  for (const p of petals){
+    const t = p.t;
+    const drop = wither > p.dropAt ? clamp01((wither - p.dropAt) / (1 - p.dropAt)) : 0;
+
+    const R = 0.09 + 0.44 * Math.pow(t, 0.95);
+    const radius = R * open * (1 + 0.35*wither);
+    const tilt = (0.10 + 0.40*open*Math.pow(t,0.55)) - 0.26*(1-open) - 0.11*(1-t) + wither*0.55;
+    const foldBase = (0.24 + 0.56*Math.pow(t,1.2) * open) * (1 + 0.32*wither);
+
+    p.pivot.rotation.y = p.ang;
+    p.pivot.position.set(0, 0, radius);
+    p.mesh.rotation.x = tilt;
+    p.mesh.rotation.z = p.jitter * 0.03;
+
+    const len = (0.22 + 0.80*Math.pow(t,0.85)) * (0.80 + 0.20*open) * (1 - 0.16*wither);
+    const w = len * (0.62 + 0.08*t) * (0.50 + 0.50*open) * (1 - 0.30*wither);
+
+    // 脱落：整片花瓣向下飘走并旋转
+    if (drop > 0){
+      p.pivot.position.y -= drop * drop * 0.55;
+      p.pivot.position.x += Math.sin(p.ang) * drop * 0.75;
+      p.pivot.position.z += Math.cos(p.ang) * drop * 0.75;
+      p.mesh.rotation.x = tilt + drop * 1.4;
+      p.mesh.rotation.z = p.jitter * 0.1 + drop * p.spin * 2.2;
+      p.mesh.scale.setScalar(1 - drop * 0.5);
+    } else {
+      p.mesh.scale.setScalar(1);
+    }
+
+    if (need) updateSurface(p.mesh, {
+      len, w, phase:p.phase,
+      fold: foldBase * (0.55 + 0.45*curl),
+      cup: (t < 0.18 ? -1 : 1) * (0.11 + 0.06*open + 0.26*wither + 0.22*(1-open)),
+      bend: 0.10 + 0.26*wither,
+      wave: (0.5 + 0.6*curl) * (0.6 + 0.4*open) * (1 + 0.8*wither),
+      root: V.root, mid: V.mid, tip: V.tip, dry: V.dry, dryTip: V.dryTip,
+      dryAmt: Math.min(1, Math.pow(wither,0.72) * (0.95 + 0.25*t)),
+      edgeLight: 0.02 + 0.04*open
+    });
+  }
+
+  // 萼片：花苞时包住花，盛开时向下翻
+  for (const s of sepalMeshes){
+    const out = open * 1.1 + wither * 0.45;
+    s.pivot.position.set(0, 0.86, 0);
+    s.pivot.rotation.y = s.ang;
+    s.mesh.rotation.x = 0.72 + out * 1.05;
+    const L = 0.70 - 0.14*open;
+    if (need) updateSurface(s.mesh, {
+      len:L, w:L*0.11, phase:s.ang,
+      fold: 0.5*out, cup: 0.10, bend:0.1, wave:0.4,
+      root:'#2E4632', mid:'#41643F', tip:'#5C7D52', dry:'#4A3E2A', dryTip:'#6E5C40',
+      dryAmt: wither*0.7, edgeLight:0.04
+    });
+  }
+
+  // 茎随衰败弯垂
+  if (need && stemMesh){
+    const oldGeo = stemMesh.geometry;
+    stemMesh.geometry = new THREE.TubeGeometry(stemCurve(wither), 40, 0.062, 10, false);
+    oldGeo.dispose();
+  }
+
+  // 叶
+  const leafCol = { root:'#23361F', mid:'#3A5C37', tip:'#52794A' };
+  const leafDry = { root:'#3A3020', mid:'#5C4B2E', tip:'#7A6440' };
+  if (need) updateSurface(leafA, {
+    len:0.55, w:0.20, phase:0.3, fold:0.35, cup:0.12, bend:0.12, wave:1.4,
+    root: wither>0.5?leafDry.root:leafCol.root,
+    mid:  wither>0.5?leafDry.mid :leafCol.mid,
+    tip:  wither>0.5?leafDry.tip :leafCol.tip,
+    dry:leafDry.root, dryTip:leafDry.tip, dryAmt:wither*0.7, edgeLight:0.05
+  });
+  if (need) updateSurface(leafB, {
+    len:0.48, w:0.17, phase:1.7, fold:0.35, cup:0.12, bend:0.12, wave:1.4,
+    root: wither>0.5?leafDry.root:leafCol.root,
+    mid:  wither>0.5?leafDry.mid :leafCol.mid,
+    tip:  wither>0.5?leafDry.tip :leafCol.tip,
+    dry:leafDry.root, dryTip:leafDry.tip, dryAmt:wither*0.7, edgeLight:0.05
+  });
+
+  // 花托颜色随衰败变暗
+  if (receptacle) receptacle.material.color.setHex(wither > 0.5 ? 0x4A3A26 : 0x37543D);
+  heart.material.color.setHex(wither > 0.6 ? 0x40241A : 0x7A0A1A);
+
+  if (need) builtLife = life;
+  syncStage(life);
+}
+
+/* ============================================================
+   UI：时间轴
+   ============================================================ */
+const tlEl = document.getElementById('timeline');
+const tlFill = document.getElementById('tlFill');
+const tlHead = document.getElementById('tlHead');
+const tlHit = document.getElementById('tlHit');
+
+const nodeEls = STAGES.map(s => {
+  const d = document.createElement('div');
+  d.className = 'tl-node';
+  d.style.left = (s.at*100) + '%';
+  const b = document.createElement('b');
+  b.textContent = s.cn;
+  d.appendChild(b);
+  tlEl.appendChild(d);
+  return d;
+});
+
+function syncStage(life){
+  tlFill.style.width = (life*100) + '%';
+  tlHead.style.left = (life*100) + '%';
+  let idx = 0;
+  STAGES.forEach((s,i) => { if (life >= s.at) idx = i; });
+  nodeEls.forEach((el,i) => el.classList.toggle('on', i === idx));
+  document.getElementById('stageNo').textContent = STAGES[idx].no + ' · ' + STAGES[idx].cn;
+  document.getElementById('stageEn').textContent = STAGES[idx].en;
+  document.getElementById('age').textContent = '第 ' + Math.round(life*39 + 1) + ' 天 / 共 40 天';
+  document.getElementById('latin').textContent = VAR[state.variety].latin;
+}
+
+tlHit.addEventListener('pointerdown', e => {
+  state.playing = false; updatePlayBtn();
+  seekFromEvent(e);
+  const move = ev => seekFromEvent(ev);
+  const up = () => { window.removeEventListener('pointermove', move); window.removeEventListener('pointerup', up); };
+  window.addEventListener('pointermove', move);
+  window.addEventListener('pointerup', up);
+});
+
+function seekFromEvent(e){
+  const r = tlEl.getBoundingClientRect();
+  const x = Math.min(1, Math.max(0, (e.clientX - r.left) / r.width));
+  state.life = x;
+  layout(state.life);
+}
+
+/* ============================================================
+   UI：控件
+   ============================================================ */
+const varsEl = document.getElementById('vars');
+Object.entries(VAR).forEach(([key,v]) => {
+  const b = document.createElement('button');
+  b.type = 'button';
+  b.dataset.key = key;
+  b.setAttribute('aria-pressed', key === state.variety ? 'true' : 'false');
+  b.innerHTML = '<i style="background:' + v.dot + '"></i>' + v.name;
+  b.addEventListener('click', () => {
+    state.variety = key;
+    [...varsEl.children].forEach(el => el.setAttribute('aria-pressed', el.dataset.key === key ? 'true':'false'));
+    layout(state.life, true);
+  });
+  varsEl.appendChild(b);
+});
+
+const petalsEl = document.getElementById('petals');
+const curlEl = document.getElementById('curl');
+const seedEl = document.getElementById('seed');
+
+petalsEl.addEventListener('input', () => {
+  state.petals = +petalsEl.value;
+  document.getElementById('petalsVal').textContent = state.petals;
+  buildPetals(state.petals);
+  layout(state.life, true);
+});
+curlEl.addEventListener('input', () => {
+  state.curl = +curlEl.value/100;
+  document.getElementById('curlVal').textContent = curlEl.value + '%';
+  layout(state.life, true);
+});
+seedEl.addEventListener('change', () => {
+  const v = Math.max(1, Math.min(99999, parseInt(seedEl.value,10) || 1));
+  seedEl.value = v; state.seed = v;
+  buildPetals(state.petals);
+  layout(state.life, true);
+});
+document.getElementById('reseed').addEventListener('click', () => {
+  state.seed = 1 + Math.floor(Math.random()*90000);
+  seedEl.value = state.seed;
+  state.petals = 20 + Math.floor(Math.random()*29);
+  petalsEl.value = state.petals;
+  document.getElementById('petalsVal').textContent = state.petals;
+  const keys = Object.keys(VAR);
+  state.variety = keys[Math.floor(Math.random()*keys.length)];
+  [...varsEl.children].forEach(el => el.setAttribute('aria-pressed', el.dataset.key === state.variety ? 'true':'false'));
+  buildPetals(state.petals);
+  layout(state.life, true);
+});
+
+const playBtn = document.getElementById('play');
+function updatePlayBtn(){ playBtn.textContent = state.playing ? '暂停' : '播放'; }
+playBtn.addEventListener('click', () => {
+  state.playing = !state.playing;
+  if (state.playing && state.life >= 0.999) state.life = 0;
+  updatePlayBtn();
+});
+
+/* 导出 */
+function toast(msg){
+  const el = document.getElementById('toast');
+  el.textContent = msg; el.classList.add('on');
+  clearTimeout(el._t); el._t = setTimeout(() => el.classList.remove('on'), 1600);
+}
+document.getElementById('export').addEventListener('click', () => {
+  const bg = new THREE.Color('#0B1310');
+  scene.background = bg;
+  renderer.render(scene, camera);
+  const url = renderer.domElement.toDataURL('image/png');
+  scene.background = null;
+  const a = document.createElement('a');
+  a.download = 'rose3d_' + state.variety + '_' + Math.round(state.life*100) + '.png';
+  a.href = url; a.click();
+  toast('已导出 PNG');
+});
+
+/* 键盘 */
+window.addEventListener('keydown', e => {
+  if (e.code === 'Space'){ e.preventDefault(); playBtn.click(); }
+  if (e.code === 'ArrowRight'){ state.playing=false; updatePlayBtn(); state.life = Math.min(1, state.life+0.03); layout(state.life); }
+  if (e.code === 'ArrowLeft'){ state.playing=false; updatePlayBtn(); state.life = Math.max(0, state.life-0.03); layout(state.life); }
+});
+
+/* ============================================================
+   循环
+   ============================================================ */
+let last = performance.now();
+let fpsAcc = 0, fpsN = 0, degraded = 0;
+function tick(now){
+  requestAnimationFrame(tick);
+  const dt = Math.min(0.12, (now - last)/1000);
+  last = now;
+
+  // 低性能设备自动降级一次，保证仍可交互
+  fpsAcc += dt; fpsN++;
+  if (fpsN >= 90 && !degraded){
+    const avg = fpsN / fpsAcc;
+    if (avg < 22){
+      degraded = 1;
+      renderer.setPixelRatio(1);
+      renderer.setSize(innerWidth, innerHeight);
+      renderer.shadowMap.enabled = false;
+      scene.traverse(o => { if (o.material) o.material.needsUpdate = true; });
+    }
+    fpsAcc = 0; fpsN = 0;
+  }
+
+  if (state.playing){
+    state.life += dt / 16;           // 14 秒走完一生
+    if (state.life > 1) state.life = 1;
+    layout(state.life);
+  }
+
+  controls.update();
+  renderer.render(scene, camera);
+}
+
+function fitCamera(){
+  camera.aspect = innerWidth/innerHeight;
+  camera.fov = 34 + Math.max(0, 1 - camera.aspect) * 20;
+  camera.updateProjectionMatrix();
+}
+window.addEventListener('resize', () => {
+  renderer.setSize(innerWidth, innerHeight);
+  fitCamera();
+});
+
+/* 启动 */
+buildPlant();
+layout(state.life);
+document.getElementById('petalsVal').textContent = state.petals;
+updatePlayBtn();
+fitCamera();
+requestAnimationFrame(tick);
+</script>
+</body>
+</html>
